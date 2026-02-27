@@ -1,0 +1,13 @@
+# Build files
+bin/
+obj/
+.vs/
+.vscode/
+
+# Settings & Secrets
+appsettings.Development.json
+appsettings.Local.json
+.env
+
+# User files
+*.user
