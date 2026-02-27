@@ -1,0 +1,6 @@
+@E7gezhaa.API_HostAddress = http://localhost:5092
+
+GET {{E7gezhaa.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
