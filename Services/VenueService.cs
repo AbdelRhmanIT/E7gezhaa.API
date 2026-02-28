@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace E7gezhaa.API.Services
@@ -9,19 +10,13 @@ namespace E7gezhaa.API.Services
     public class VenueService : IVenueService
     {
         private readonly AppDbContext _context;
-
-        public VenueService(AppDbContext context)
-        {
-            _context = context;
-        }
+        public VenueService(AppDbContext context) => _context = context;
 
         public async Task<IEnumerable<Venue>> GetRecommendedVenuesAsync(int count)
         {
-            // حالياً: بنجيب أعلى القاعات تقييماً (Logic بسيط)
-            // مستقبلاً: هنا هيركب موديل الـ AI
             return await _context.Venues
                 .Include(v => v.Images)
-                .OrderByDescending(v => v.PricePerHour) // كنموذج أولي
+                .OrderByDescending(v => v.PricePerHour)
                 .Take(count)
                 .ToListAsync();
         }

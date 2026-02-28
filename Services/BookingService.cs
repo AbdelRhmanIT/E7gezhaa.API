@@ -58,16 +58,23 @@ namespace E7gezhaa.API.Services
                 .Where(b => b.UserId == userId)
                 .Include(b => b.Venue)
                 .Include(b => b.TimeSlot)
-                // إضافة الفلترة هنا:
-                .Where(b => b.Venue != null && b.TimeSlot != null)
+                .Include(b => b.PhotographerPackage)
+                .Include(b => b.BeautyPackage)
+                .Include(b => b.BookingItems)
                 .Select(b => new BookingDashboardDto
                 {
                     BookingId = b.Id,
-                    VenueName = b.Venue!.Name, // خلاص اتأكدنا إنها مش null
-                    StartTime = b.TimeSlot!.StartTime, // اتأكدنا إنها مش null
+                    VenueName = b.Venue != null ? b.Venue.Name : "قاعة غير محددة",
+                    StartTime = b.TimeSlot != null ? b.TimeSlot.StartTime : DateTime.MinValue,
                     Status = b.Status ?? "Pending",
                     TotalPrice = b.TotalPrice,
-                    CanRate = b.Status == "Completed"
+                    CanRate = b.Status == "Completed",
+
+                    PhotographerName = b.PhotographerPackage != null ? b.PhotographerPackage.Name : "لا يوجد",
+                    BeautyPackageName = b.BeautyPackage != null ? b.BeautyPackage.Name : "لا يوجد",
+
+                    // تحويل الـ BookingItems لـ List of strings للقراءة
+                    ExtraItems = b.BookingItems.Select(bi => $"{bi.ItemType} (Ref: {bi.ItemId})").ToList()
                 })
                 .OrderByDescending(b => b.StartTime)
                 .ToListAsync();

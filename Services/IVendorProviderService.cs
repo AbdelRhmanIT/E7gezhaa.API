@@ -6,10 +6,10 @@ namespace E7gezhaa.API.Services
 {
     public interface IVendorProviderService
     {
-        // التعديل: تغيير int لـ string ليطابق الـ Identity والـ Service
+        // مطابق تماماً للـ Implementation اللي عملناه
         Task<IEnumerable<VendorService>> GetServicesByVendorIdAsync(string vendorId);
 
-        // التعديل هنا: حافظنا على الـ ? لضمان عدم وجود Warning
+        // مطابق للـ Implementation اللي عملناه
         Task<VendorService?> GetServiceByIdAsync(int serviceId);
     }
 }
