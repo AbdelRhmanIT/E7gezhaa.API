@@ -14,26 +14,29 @@ namespace E7gezhaa.API.Entities
         public string UserId { get; set; } = string.Empty;
 
         [ForeignKey("UserId")]
-        public User? User { get; set; }
+        public virtual User? User { get; set; }
 
         // 1. حجز القاعات (اختياري)
         public int? VenueId { get; set; }
         [ForeignKey("VenueId")]
-        public Venue? Venue { get; set; }
+        public virtual Venue? Venue { get; set; }
 
         public int? TimeSlotId { get; set; }
         [ForeignKey("TimeSlotId")]
-        public TimeSlot? TimeSlot { get; set; }
+        public virtual TimeSlot? TimeSlot { get; set; }
 
         // 2. حجز باقات المصورين (اختياري)
         public int? PhotographerPackageId { get; set; }
         [ForeignKey("PhotographerPackageId")]
-        public PhotographerPackage? PhotographerPackage { get; set; }
+        public virtual PhotographerPackage? PhotographerPackage { get; set; }
 
-        // 3. حجز باقات التجميل والكوافير (التعديل الجديد - اختياري)
+        // 3. حجز باقات التجميل والكوافير
         public int? BeautyPackageId { get; set; }
         [ForeignKey("BeautyPackageId")]
-        public BeautyPackage? BeautyPackage { get; set; }
+        public virtual BeautyPackage? BeautyPackage { get; set; }
+
+        // الوصلة الجديدة للدفع
+        public virtual Payment? Payment { get; set; }
 
         [Required]
         public DateTime BookingDate { get; set; } = DateTime.UtcNow;
@@ -44,7 +47,7 @@ namespace E7gezhaa.API.Entities
 
         public string Status { get; set; } = "Pending"; // Pending, Confirmed, Cancelled
 
-        // علاقة بنود الحجز الإضافية (مثل الفساتين أو خدمات فرعية)
+        // علاقة بنود الحجز الإضافية
         public ICollection<BookingItem> BookingItems { get; set; } = new List<BookingItem>();
     }
 }

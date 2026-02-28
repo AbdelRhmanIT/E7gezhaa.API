@@ -1,26 +1,30 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using E7gezhaa.API.Entities;
-using E7gezhaa.API.Services;
+﻿using E7gezhaa.API.Entities;
 using E7gezhaa.API.Middleware;
-using Microsoft.EntityFrameworkCore;
-using System.Text.Json.Serialization;
+using E7gezhaa.API.Services;
+using E7gezhaa.API.Settings; // <-- تأكد من هذا الـ Namespace
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System;
+using System.Text;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. الربط بالداتا بيز مع إضافة خاصية "المرونة" (Retry Strategy)
+// 1. الربط بالداتا بيز
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),
     sqlServerOptionsAction: sqlOptions =>
     {
-        // ده الجزء اللي بيمنع الـ Transient Failure error اللي ظهرلك
         sqlOptions.EnableRetryOnFailure(
             maxRetryCount: 5,
             maxRetryDelay: TimeSpan.FromSeconds(30),
             errorNumbersToAdd: null);
     }));
+
+// --- إعدادات الـ Paymob ---
+builder.Services.Configure<PaymobSettings>(builder.Configuration.GetSection("Paymob"));
 
 // --- تسجيل الخدمات ---
 builder.Services.AddScoped<IBookingService, BookingService>();
@@ -30,11 +34,13 @@ builder.Services.AddScoped<IVendorProviderService, VendorProviderService>();
 builder.Services.AddScoped<IWeddingAttireService, WeddingAttireService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
-builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IAiRecommendationService, AiRecommendationService>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IPhotographerService, PhotographerService>();
 builder.Services.AddScoped<IBeautyService, BeautyService>();
+
+// تسجيل خدمة الدفع كـ HttpClient لاستخدامها مع Paymob
+builder.Services.AddHttpClient<IPaymentService, PaymobService>();
 
 // --- إضافة نظام الـ Identity ---
 builder.Services.AddIdentity<User, IdentityRole>(options => {
@@ -45,6 +51,8 @@ builder.Services.AddIdentity<User, IdentityRole>(options => {
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
+
+
 
 // 2. حل مشكلة الـ Circular Reference
 builder.Services.AddControllers()
@@ -84,7 +92,6 @@ var app = builder.Build();
 // --- تأسيس الأدوار (Role Seeding) ---
 using (var scope = app.Services.CreateScope())
 {
-    // أضفنا try-catch هنا لزيادة الأمان أثناء تشغيل السيرفر لأول مرة
     try
     {
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
