@@ -13,7 +13,6 @@ namespace E7gezhaa.API.Entities
         public DbSet<Venue> Venues { get; set; }
         public DbSet<Vendor> Vendors { get; set; }
         public DbSet<Location> Locations { get; set; }
-        public DbSet<WeddingAttire> WeddingAttires { get; set; }
         public DbSet<VendorService> VendorServices { get; set; }
         public DbSet<Style> Styles { get; set; }
         public DbSet<EventType> EventTypes { get; set; }
@@ -28,7 +27,6 @@ namespace E7gezhaa.API.Entities
         public DbSet<AiModel> AiModels { get; set; }
         public DbSet<AiSuggestion> AiSuggestions { get; set; }
         public DbSet<AiRecommendationLog> AiRecommendationLogs { get; set; }
-        public DbSet<AttireBooking> AttireBookings { get; set; }
         public DbSet<PhotographerPackage> PhotographerPackages { get; set; }
         public DbSet<BeautyPackage> BeautyPackages { get; set; }
 
@@ -36,7 +34,7 @@ namespace E7gezhaa.API.Entities
         {
             base.OnModelCreating(modelBuilder);
 
-            // --- 1. حل مشكلة الـ Decimal Precision ---
+            // --- 1. Decimal Precision ---
             var decimalProperties = modelBuilder.Model.GetEntityTypes()
                 .SelectMany(t => t.GetProperties())
                 .Where(p => p.ClrType == typeof(decimal) || p.ClrType == typeof(decimal?));
@@ -46,71 +44,75 @@ namespace E7gezhaa.API.Entities
                 property.SetColumnType("decimal(18,2)");
             }
 
-            // --- 2. حل مشكلة الـ Multiple Cascade Paths (تأمين العلاقات) ---
-
-            // علاقة الحجز بالقاعة
+            // --- 2. Booking Relations ---
             modelBuilder.Entity<Booking>()
                 .HasOne(b => b.Venue)
                 .WithMany()
                 .HasForeignKey(b => b.VenueId)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // علاقة الحجز باليوزر
             modelBuilder.Entity<Booking>()
                 .HasOne(b => b.User)
                 .WithMany()
                 .HasForeignKey(b => b.UserId)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // علاقة المراجعات (Reviews) باليوزر
+            // --- 3. Review Relations ---
             modelBuilder.Entity<Review>()
                 .HasOne(r => r.User)
                 .WithMany()
                 .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // علاقة المراجعات (Reviews) بالحجز (النخاع الشوكي - الإضافة الجديدة)
             modelBuilder.Entity<Review>()
                 .HasOne(r => r.Booking)
                 .WithMany()
                 .HasForeignKey(r => r.BookingId)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // --- 3. باقي العلاقات والـ Shadow State ---
-
+            // --- 4. Venue -> Vendor
+            // ✅ الإصلاح: WithMany(v => v.Venues) بدل WithMany() لأن Vendor عنده ICollection<Venue>
             modelBuilder.Entity<Venue>()
                 .HasOne(v => v.Vendor)
-                .WithMany()
+                .WithMany(v => v.Venues)
                 .HasForeignKey(v => v.VendorId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // --- 5. BookingItem ---
             modelBuilder.Entity<BookingItem>()
                 .HasOne(bi => bi.Booking)
                 .WithMany(b => b.BookingItems)
                 .HasForeignKey(bi => bi.BookingId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // --- 6. Vendor -> Location ---
             modelBuilder.Entity<Vendor>()
                 .HasOne(v => v.Location)
                 .WithMany()
                 .HasForeignKey(v => v.LocationId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // --- 7. TimeSlot -> Venue ---
             modelBuilder.Entity<TimeSlot>()
                 .HasOne(t => t.Space)
                 .WithMany(s => s.TimeSlots)
                 .HasForeignKey(t => t.VenueId);
 
+            // --- 8. VenueImage -> Venue ---
             modelBuilder.Entity<VenueImage>()
                 .HasOne(i => i.Space)
                 .WithMany(s => s.Images)
                 .HasForeignKey(i => i.VenueId);
 
+            // --- 9. Payment -> Booking
+            // ✅ الإصلاح: WithOne بدل WithMany لأن الـ Booking عنده Payment واحد فقط
             modelBuilder.Entity<Payment>()
                 .HasOne(p => p.Booking)
-                .WithMany()
-                .HasForeignKey(p => p.BookingId);
+                .WithOne(b => b.Payment)
+                .HasForeignKey<Payment>(p => p.BookingId)
+                .OnDelete(DeleteBehavior.NoAction);
 
+            // --- 10. AiSuggestion -> Booking ---
             modelBuilder.Entity<AiSuggestion>()
                 .HasOne(a => a.Booking)
                 .WithMany()

@@ -35,21 +35,46 @@ namespace E7gezhaa.API.Services
 
         public async Task<(bool Success, string Message)> AddBookingAsync(Booking booking, int timeSlotId)
         {
-            try
-            {
-                var timeSlot = await _context.TimeSlots.FindAsync(timeSlotId);
-                if (timeSlot == null || timeSlot.IsBooked)
-                    return (false, "عذراً، هذا الموعد غير متاح أو تم حجزه بالفعل.");
+            var strategy = _context.Database.CreateExecutionStrategy();
+            bool success = false;
+            string message = "";
 
-                timeSlot.IsBooked = true;
-                _context.Bookings.Add(booking);
-                await _context.SaveChangesAsync();
-                return (true, "تم الحجز بنجاح!");
-            }
-            catch (DbUpdateConcurrencyException)
+            await strategy.ExecuteAsync(async () =>
             {
-                return (false, "عذراً، الموعد ده اتحجز في اللحظة دي بالضبط. يرجى اختيار موعد آخر.");
-            }
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var timeSlot = await _context.TimeSlots.FindAsync(timeSlotId);
+                    if (timeSlot == null || timeSlot.IsBooked)
+                    {
+                        success = false;
+                        message = "عذراً، هذا الموعد غير متاح أو تم حجزه بالفعل.";
+                        return;
+                    }
+
+                    timeSlot.IsBooked = true;
+                    _context.Bookings.Add(booking);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    success = true;
+                    message = "تم الحجز بنجاح!";
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    await transaction.RollbackAsync();
+                    success = false;
+                    message = "عذراً، الموعد ده اتحجز في اللحظة دي بالضبط. يرجى اختيار موعد آخر.";
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    success = false;
+                    message = ex.InnerException?.Message ?? ex.Message;
+                }
+            });
+
+            return (success, message);
         }
 
         public async Task<List<BookingDashboardDto>> GetUserBookingsAsync(string userId)
@@ -69,11 +94,8 @@ namespace E7gezhaa.API.Services
                     Status = b.Status ?? "Pending",
                     TotalPrice = b.TotalPrice,
                     CanRate = b.Status == "Completed",
-
                     PhotographerName = b.PhotographerPackage != null ? b.PhotographerPackage.Name : "لا يوجد",
                     BeautyPackageName = b.BeautyPackage != null ? b.BeautyPackage.Name : "لا يوجد",
-
-                    // تحويل الـ BookingItems لـ List of strings للقراءة
                     ExtraItems = b.BookingItems.Select(bi => $"{bi.ItemType} (Ref: {bi.ItemId})").ToList()
                 })
                 .OrderByDescending(b => b.StartTime)

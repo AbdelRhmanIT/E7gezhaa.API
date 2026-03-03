@@ -27,22 +27,39 @@ namespace E7gezhaa.API.Services
 
         public async Task<Booking?> BookBeautySessionAsync(int packageId, DateTime date, string userId)
         {
-            var package = await _context.BeautyPackages.FindAsync(packageId);
-            if (package == null) return null;
+            var strategy = _context.Database.CreateExecutionStrategy();
+            Booking? result = null;
 
-            var booking = new Booking
+            await strategy.ExecuteAsync(async () =>
             {
-                UserId = userId,
-                BeautyPackageId = packageId,
-                BookingDate = date,
-                TotalPrice = package.Price,
-                Status = "Pending",
-                VenueId = null // ميك أب فقط
-            };
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var package = await _context.BeautyPackages.FindAsync(packageId);
+                    if (package == null) return;
 
-            _context.Bookings.Add(booking);
-            await _context.SaveChangesAsync();
-            return booking;
+                    var booking = new Booking
+                    {
+                        UserId = userId,
+                        BeautyPackageId = packageId,
+                        BookingDate = date,
+                        TotalPrice = package.Price,
+                        Status = "Pending",
+                        VenueId = null
+                    };
+
+                    _context.Bookings.Add(booking);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    result = booking;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                }
+            });
+
+            return result;
         }
     }
 }

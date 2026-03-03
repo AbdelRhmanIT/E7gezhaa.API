@@ -4,7 +4,10 @@ namespace E7gezhaa.API.Services
 {
     public interface INotificationService
     {
-        // إرسال إشعار بسيط (لليوزر أو للفيندور)
-        Task<bool> SendNotificationAsync(string userId, string message);
+        // إرسال إشعار + بريد إلكتروني
+        Task<bool> SendNotificationAsync(string userId, string message, string? email = null);
+
+        // إرسال بريد إلكتروني مباشر
+        Task<bool> SendEmailAsync(string toEmail, string subject, string body);
     }
 }

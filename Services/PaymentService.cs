@@ -13,37 +13,45 @@ namespace E7gezhaa.API.Services
 
         public async Task<bool> ProcessPaymentAsync(Payment payment, string userId)
         {
-            // بدء الـ Transaction لضمان سلامة الداتا (ACID)
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
+            var strategy = _context.Database.CreateExecutionStrategy();
+            bool result = false;
+
+            await strategy.ExecuteAsync(async () =>
             {
-                // التحقق من الحجز والتأكد من ملكيته لليوزر
-                var booking = await _context.Bookings
-                    .FirstOrDefaultAsync(b => b.Id == payment.BookingId && b.UserId == userId);
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    // التحقق من الحجز وملكيته لليوزر
+                    var booking = await _context.Bookings
+                        .FirstOrDefaultAsync(b => b.Id == payment.BookingId && b.UserId == userId);
 
-                if (booking == null || booking.Status == "Paid")
-                    return false;
+                    if (booking == null || booking.Status == "Paid")
+                    {
+                        result = false;
+                        return;
+                    }
 
-                // إضافة عملية الدفع
-                _context.Payments.Add(payment);
+                    // إضافة عملية الدفع
+                    _context.Payments.Add(payment);
 
-                // تحديث حالة الحجز
-                booking.Status = "Paid";
-                _context.Bookings.Update(booking);
+                    // تحديث حالة الحجز
+                    booking.Status = "Paid";
+                    _context.Bookings.Update(booking);
 
-                // حفظ التغييرات
-                await _context.SaveChangesAsync();
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
 
-                // التأكيد النهائي
-                await transaction.CommitAsync();
-                return true;
-            }
-            catch (Exception)
-            {
-                // في حالة أي خطأ، بنرجع الداتا زي ما كانت
-                await transaction.RollbackAsync();
-                return false;
-            }
+                    result = true;
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    Console.WriteLine($"Payment Error: {ex.InnerException?.Message ?? ex.Message}");
+                    result = false;
+                }
+            });
+
+            return result;
         }
 
         public async Task<Payment?> GetPaymentByBookingIdAsync(int bookingId) =>

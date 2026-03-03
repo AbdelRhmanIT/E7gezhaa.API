@@ -5,7 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using Microsoft.EntityFrameworkCore; // لضمان عمل الـ ExecutionStrategy
+using Microsoft.EntityFrameworkCore;
 
 namespace E7gezhaa.API.Controllers
 {
@@ -53,16 +53,15 @@ namespace E7gezhaa.API.Controllers
                     if (result.Succeeded)
                     {
                         if (!await _roleManager.RoleExistsAsync(user.Role))
-                        {
                             await _roleManager.CreateAsync(new IdentityRole(user.Role));
-                        }
+
                         await _userManager.AddToRoleAsync(user, user.Role);
 
                         if (user.Role == "Vendor")
                         {
                             var vendor = new Vendor
                             {
-                                Id = user.Id, // الربط بالنخاع الشوكي (Identity ID)
+                                Id = user.Id,
                                 Name = user.FullName
                             };
                             _context.Vendors.Add(vendor);
@@ -78,13 +77,8 @@ namespace E7gezhaa.API.Controllers
                 catch (Exception ex)
                 {
                     await transaction.RollbackAsync();
-                    var realError = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-
-                    return StatusCode(500, new
-                    {
-                        Error = "حدث خطأ في قاعدة البيانات",
-                        Detail = realError
-                    });
+                    var realError = ex.InnerException?.Message ?? ex.Message;
+                    return StatusCode(500, new { Error = "حدث خطأ في قاعدة البيانات", Detail = realError });
                 }
             });
         }
@@ -104,21 +98,21 @@ namespace E7gezhaa.API.Controllers
 
         private string CreateToken(User user, IList<string> roles)
         {
-            var tokenKey = _configuration.GetSection("AppSettings:Token").Value;
-            if (string.IsNullOrEmpty(tokenKey)) throw new Exception("Token key is missing!");
+            // ✅ الإصلاح: نفس طريقة القراءة في Program.cs
+            var tokenKey = _configuration["AppSettings:Token"]
+                ?? "E7gezhaa_Super_Secret_JWT_Key_2026_ForProduction!";
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256Signature);
 
-            var claims = new List<Claim> {
+            var claims = new List<Claim>
+            {
                 new Claim(ClaimTypes.Name, user.Email ?? "Unknown"),
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
             };
 
             foreach (var role in roles)
-            {
                 claims.Add(new Claim(ClaimTypes.Role, role));
-            }
 
             var token = new JwtSecurityToken(
                 claims: claims,
@@ -130,7 +124,6 @@ namespace E7gezhaa.API.Controllers
         }
     }
 
-    // الـ DTO اللي كان ناقص وعمل المشكلة
     public class UserDto
     {
         public string Email { get; set; } = string.Empty;
