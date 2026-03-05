@@ -4,6 +4,7 @@ using E7gezhaa.API.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace E7gezhaa.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260303231752_AddRefreshToken")]
+    partial class AddRefreshToken
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -156,12 +159,6 @@ namespace E7gezhaa.API.Migrations
 
                     b.Property<DateTime>("BookingDate")
                         .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
 
                     b.Property<int?>("PhotographerPackageId")
                         .HasColumnType("int");
@@ -629,9 +626,6 @@ namespace E7gezhaa.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<decimal>("DepositPercentage")
                         .HasColumnType("decimal(18,2)");
 
@@ -641,9 +635,6 @@ namespace E7gezhaa.API.Migrations
 
                     b.Property<string>("Features")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
 
                     b.Property<double?>("Latitude")
                         .HasColumnType("float");
@@ -942,7 +933,8 @@ namespace E7gezhaa.API.Migrations
                     b.HasOne("E7gezhaa.API.Entities.Booking", "Booking")
                         .WithMany()
                         .HasForeignKey("BookingId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Booking");
                 });
@@ -999,7 +991,8 @@ namespace E7gezhaa.API.Migrations
                     b.HasOne("E7gezhaa.API.Entities.Booking", "Booking")
                         .WithMany("BookingItems")
                         .HasForeignKey("BookingId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Booking");
                 });
@@ -1020,7 +1013,8 @@ namespace E7gezhaa.API.Migrations
                     b.HasOne("E7gezhaa.API.Entities.Booking", "Booking")
                         .WithOne("Payment")
                         .HasForeignKey("E7gezhaa.API.Entities.Payment", "BookingId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
 
                     b.Navigation("Booking");
                 });
@@ -1082,7 +1076,8 @@ namespace E7gezhaa.API.Migrations
                     b.HasOne("E7gezhaa.API.Entities.Venue", "Space")
                         .WithMany("TimeSlots")
                         .HasForeignKey("VenueId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Space");
                 });
@@ -1137,7 +1132,8 @@ namespace E7gezhaa.API.Migrations
                     b.HasOne("E7gezhaa.API.Entities.Venue", "Space")
                         .WithMany("Images")
                         .HasForeignKey("VenueId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Space");
                 });

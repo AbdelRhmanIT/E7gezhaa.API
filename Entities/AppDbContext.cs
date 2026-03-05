@@ -9,7 +9,6 @@ namespace E7gezhaa.API.Entities
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
-        // --- الجداول ---
         public DbSet<Venue> Venues { get; set; }
         public DbSet<Vendor> Vendors { get; set; }
         public DbSet<Location> Locations { get; set; }
@@ -29,94 +28,102 @@ namespace E7gezhaa.API.Entities
         public DbSet<AiRecommendationLog> AiRecommendationLogs { get; set; }
         public DbSet<PhotographerPackage> PhotographerPackages { get; set; }
         public DbSet<BeautyPackage> BeautyPackages { get; set; }
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // --- 1. Decimal Precision ---
+            // --- Decimal Precision ---
             var decimalProperties = modelBuilder.Model.GetEntityTypes()
                 .SelectMany(t => t.GetProperties())
                 .Where(p => p.ClrType == typeof(decimal) || p.ClrType == typeof(decimal?));
 
             foreach (var property in decimalProperties)
-            {
                 property.SetColumnType("decimal(18,2)");
-            }
 
-            // --- 2. Booking Relations ---
+            // --- Soft Delete Global Filters ---
+            modelBuilder.Entity<Venue>().HasQueryFilter(v => !v.IsDeleted);
+            modelBuilder.Entity<Booking>().HasQueryFilter(b => !b.IsDeleted);
+
+            // --- Booking Relations ---
             modelBuilder.Entity<Booking>()
-                .HasOne(b => b.Venue)
-                .WithMany()
+                .HasOne(b => b.Venue).WithMany()
                 .HasForeignKey(b => b.VenueId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.NoAction);
 
             modelBuilder.Entity<Booking>()
-                .HasOne(b => b.User)
-                .WithMany()
+                .HasOne(b => b.User).WithMany()
                 .HasForeignKey(b => b.UserId)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // --- 3. Review Relations ---
+            // --- BookingItem -> Booking (Optional) ---
+            modelBuilder.Entity<BookingItem>()
+                .HasOne(bi => bi.Booking).WithMany(b => b.BookingItems)
+                .HasForeignKey(bi => bi.BookingId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // --- Payment -> Booking (Optional) ---
+            modelBuilder.Entity<Payment>()
+                .HasOne(p => p.Booking).WithOne(b => b.Payment)
+                .HasForeignKey<Payment>(p => p.BookingId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            // --- AiSuggestion -> Booking (Optional) ---
+            modelBuilder.Entity<AiSuggestion>()
+                .HasOne(a => a.Booking).WithMany()
+                .HasForeignKey(a => a.BookingId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            // --- Review Relations ---
             modelBuilder.Entity<Review>()
-                .HasOne(r => r.User)
-                .WithMany()
+                .HasOne(r => r.User).WithMany()
                 .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.NoAction);
 
             modelBuilder.Entity<Review>()
-                .HasOne(r => r.Booking)
-                .WithMany()
+                .HasOne(r => r.Booking).WithMany()
                 .HasForeignKey(r => r.BookingId)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // --- 4. Venue -> Vendor
-            // ✅ الإصلاح: WithMany(v => v.Venues) بدل WithMany() لأن Vendor عنده ICollection<Venue>
+            // --- Venue -> Vendor ---
             modelBuilder.Entity<Venue>()
-                .HasOne(v => v.Vendor)
-                .WithMany(v => v.Venues)
+                .HasOne(v => v.Vendor).WithMany(v => v.Venues)
                 .HasForeignKey(v => v.VendorId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // --- 5. BookingItem ---
-            modelBuilder.Entity<BookingItem>()
-                .HasOne(bi => bi.Booking)
-                .WithMany(b => b.BookingItems)
-                .HasForeignKey(bi => bi.BookingId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // --- 6. Vendor -> Location ---
+            // --- Vendor -> Location ---
             modelBuilder.Entity<Vendor>()
-                .HasOne(v => v.Location)
-                .WithMany()
+                .HasOne(v => v.Location).WithMany()
                 .HasForeignKey(v => v.LocationId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // --- 7. TimeSlot -> Venue ---
+            // --- TimeSlot -> Venue (Optional) ---
             modelBuilder.Entity<TimeSlot>()
-                .HasOne(t => t.Space)
-                .WithMany(s => s.TimeSlots)
-                .HasForeignKey(t => t.VenueId);
-
-            // --- 8. VenueImage -> Venue ---
-            modelBuilder.Entity<VenueImage>()
-                .HasOne(i => i.Space)
-                .WithMany(s => s.Images)
-                .HasForeignKey(i => i.VenueId);
-
-            // --- 9. Payment -> Booking
-            // ✅ الإصلاح: WithOne بدل WithMany لأن الـ Booking عنده Payment واحد فقط
-            modelBuilder.Entity<Payment>()
-                .HasOne(p => p.Booking)
-                .WithOne(b => b.Payment)
-                .HasForeignKey<Payment>(p => p.BookingId)
+                .HasOne(t => t.Space).WithMany(s => s.TimeSlots)
+                .HasForeignKey(t => t.VenueId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // --- 10. AiSuggestion -> Booking ---
-            modelBuilder.Entity<AiSuggestion>()
-                .HasOne(a => a.Booking)
-                .WithMany()
-                .HasForeignKey(a => a.BookingId);
+            // --- VenueImage -> Venue (Optional) ---
+            modelBuilder.Entity<VenueImage>()
+                .HasOne(i => i.Space).WithMany(s => s.Images)
+                .HasForeignKey(i => i.VenueId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            // --- RefreshToken -> User ---
+            modelBuilder.Entity<RefreshToken>()
+                .HasOne(r => r.User).WithMany()
+                .HasForeignKey(r => r.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<RefreshToken>()
+                .HasIndex(r => r.Token).IsUnique();
         }
     }
 }

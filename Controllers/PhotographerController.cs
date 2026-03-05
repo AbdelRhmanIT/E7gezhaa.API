@@ -1,10 +1,9 @@
-﻿using E7gezhaa.API.Entities;
+﻿using E7gezhaa.API.DTOs;
+using E7gezhaa.API.Entities;
 using E7gezhaa.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System;
 using System.Security.Claims;
-using System.Threading.Tasks;
 
 namespace E7gezhaa.API.Controllers
 {
@@ -22,18 +21,39 @@ namespace E7gezhaa.API.Controllers
         }
 
         [HttpGet("packages")]
-        public async Task<IActionResult> GetPackages() => Ok(await _photoService.GetAllPackagesAsync());
+        public async Task<IActionResult> GetPackages([FromQuery] PaginationParams pagination)
+        {
+            var allPackages = await _photoService.GetAllPackagesAsync();
+            var list = allPackages.ToList();
+            var totalCount = list.Count;
+            var paged = list
+                .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+                .Take(pagination.PageSize)
+                .ToList();
+
+            return Ok(new PagedResult<object>
+            {
+                Data = paged,
+                TotalCount = totalCount,
+                PageNumber = pagination.PageNumber,
+                PageSize = pagination.PageSize
+            });
+        }
 
         [HttpPost("add-package")]
         [Authorize(Roles = "Vendor")]
         public async Task<IActionResult> AddPackage([FromBody] PhotographerPackageDto dto)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
             var package = new PhotographerPackage
             {
                 VendorId = userId!,
                 Name = dto.Name,
-                Description = dto.Description,
+                Description = dto.Description ?? "",
                 Price = dto.Price,
                 DurationInHours = dto.DurationInHours
             };
@@ -44,15 +64,18 @@ namespace E7gezhaa.API.Controllers
 
         [HttpPost("book")]
         [Authorize]
-        public async Task<IActionResult> BookPhotographer([FromBody] PhotoBookingRequest request)
+        public async Task<IActionResult> BookPhotographer([FromBody] PhotoBookingRequestDto request)
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var package = await _photoService.GetPackageByIdAsync(request.PackageId);
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-            if (package == null) return NotFound("الباقة غير موجودة");
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var package = await _photoService.GetPackageByIdAsync(request.PackageId);
+            if (package == null) return NotFound(new { Message = "الباقة غير موجودة" });
 
             if (!await _photoService.IsAvailableAsync(package.VendorId, request.EventDate))
-                return BadRequest("المصور محجوز في هذا التاريخ");
+                return BadRequest(new { Message = "المصور محجوز في هذا التاريخ" });
 
             var booking = new Booking
             {
@@ -68,19 +91,5 @@ namespace E7gezhaa.API.Controllers
 
             return Ok(new { Message = "تم الحجز بنجاح", Total = package.Price });
         }
-    }
-
-    public class PhotographerPackageDto
-    {
-        public string Name { get; set; } = "";
-        public string Description { get; set; } = "";
-        public decimal Price { get; set; }
-        public int DurationInHours { get; set; }
-    }
-
-    public class PhotoBookingRequest
-    {
-        public int PackageId { get; set; }
-        public DateTime EventDate { get; set; }
     }
 }

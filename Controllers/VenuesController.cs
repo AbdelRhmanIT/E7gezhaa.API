@@ -1,11 +1,10 @@
-﻿using E7gezhaa.API.Entities;
+﻿using E7gezhaa.API.DTOs;
+using E7gezhaa.API.Entities;
 using E7gezhaa.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System;
 using System.Security.Claims;
-using System.Threading.Tasks;
 
 namespace E7gezhaa.API.Controllers
 {
@@ -22,22 +21,29 @@ namespace E7gezhaa.API.Controllers
             _fileService = fileService;
         }
 
-        /// <summary>
-        /// جلب كل القاعات
-        /// </summary>
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] PaginationParams pagination)
         {
-            var venues = await _context.Venues
+            var query = _context.Venues
                 .Include(v => v.Images)
                 .Include(v => v.DetailedLocation)
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+            var venues = await query
+                .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+                .Take(pagination.PageSize)
                 .ToListAsync();
-            return Ok(venues);
+
+            return Ok(new PagedResult<object>
+            {
+                Data = venues,
+                TotalCount = totalCount,
+                PageNumber = pagination.PageNumber,
+                PageSize = pagination.PageSize
+            });
         }
 
-        /// <summary>
-        /// جلب قاعة بالـ ID مع مواعيدها
-        /// </summary>
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -54,13 +60,13 @@ namespace E7gezhaa.API.Controllers
             return Ok(venue);
         }
 
-        /// <summary>
-        /// إضافة قاعة - يقبل JSON أو Form-Data
-        /// </summary>
         [HttpPost]
         [Authorize(Roles = "Admin,Vendor")]
         public async Task<IActionResult> PostVenue([FromBody] VenueRequestDto request)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
@@ -100,7 +106,7 @@ namespace E7gezhaa.API.Controllers
                 catch (Exception ex)
                 {
                     await transaction.RollbackAsync();
-                    errorMessage = ex.Message;
+                    errorMessage = ex.InnerException?.Message ?? ex.Message;
                 }
             });
 
@@ -110,9 +116,6 @@ namespace E7gezhaa.API.Controllers
             return Ok(new { Message = "تمت إضافة القاعة بنجاح", Id = savedVenue!.Id, Data = savedVenue });
         }
 
-        /// <summary>
-        /// رفع صورة للقاعة
-        /// </summary>
         [HttpPost("{id}/upload-image")]
         [Authorize(Roles = "Admin,Vendor")]
         public async Task<IActionResult> UploadImage(int id, IFormFile imageFile)
@@ -131,13 +134,13 @@ namespace E7gezhaa.API.Controllers
             return Ok(new { Message = "تم رفع الصورة بنجاح", ImageUrl = imageUrl });
         }
 
-        /// <summary>
-        /// إضافة TimeSlot لقاعة
-        /// </summary>
         [HttpPost("{id}/timeslots")]
         [Authorize(Roles = "Admin,Vendor")]
         public async Task<IActionResult> AddTimeSlot(int id, [FromBody] TimeSlotRequestDto request)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var venue = await _context.Venues.FindAsync(id);
             if (venue == null) return NotFound(new { Message = "القاعة غير موجودة" });
 
@@ -155,30 +158,54 @@ namespace E7gezhaa.API.Controllers
 
             return Ok(new { Message = "تمت إضافة الموعد بنجاح", Id = slot.Id, Data = slot });
         }
-    }
 
-    public class VenueRequestDto
-    {
-        public string Name { get; set; } = string.Empty;
-        public string Type { get; set; } = string.Empty;
-        public decimal PricePerHour { get; set; }
-        public int Capacity { get; set; }
-        public string? Description { get; set; }
-        public string? Location { get; set; }
-        public string? Category { get; set; }
-        public decimal DepositPercentage { get; set; } = 25;
-        public int? LocationId { get; set; }
-        public string? Features { get; set; }
-        public string? WebsiteUrl { get; set; }
-        public decimal? WeekendPrice { get; set; }
-        public double? Latitude { get; set; }
-        public double? Longitude { get; set; }
-    }
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin,Vendor")]
+        public async Task<IActionResult> DeleteVenue(int id)
+        {
+            var venue = await _context.Venues.FindAsync(id);
+            if (venue == null) return NotFound(new { Message = "القاعة غير موجودة" });
 
-    public class TimeSlotRequestDto
-    {
-        public DateTime StartTime { get; set; }
-        public DateTime EndTime { get; set; }
-        public decimal PriceAdjustment { get; set; } = 0;
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (venue.VendorId != userId && !User.IsInRole("Admin"))
+                return Forbid();
+
+            venue.IsDeleted = true;
+            venue.DeletedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "تم حذف القاعة بنجاح." });
+        }
+
+        [HttpPost("{id}/restore")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> RestoreVenue(int id)
+        {
+            var venue = await _context.Venues
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(v => v.Id == id && v.IsDeleted);
+
+            if (venue == null)
+                return NotFound(new { Message = "القاعة غير موجودة أو غير محذوفة." });
+
+            venue.IsDeleted = false;
+            venue.DeletedAt = null;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "تم استعادة القاعة بنجاح." });
+        }
+
+        [HttpGet("deleted")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetDeletedVenues()
+        {
+            var deletedVenues = await _context.Venues
+                .IgnoreQueryFilters()
+                .Where(v => v.IsDeleted)
+                .Include(v => v.DetailedLocation)
+                .ToListAsync();
+
+            return Ok(deletedVenues);
+        }
     }
 }

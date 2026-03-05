@@ -4,11 +4,13 @@ using E7gezhaa.API.Services;
 using E7gezhaa.API.Settings;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,11 +20,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        sqlOptions =>
-        {
-            sqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(30), null);
-        }));
+        builder.Configuration.GetConnectionString("DefaultConnection")));
 
 //////////////////////////////////////////////////////////////
 // IDENTITY
@@ -30,10 +28,14 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddIdentity<User, IdentityRole>(options =>
 {
-    options.Password.RequireDigit = false;
-    options.Password.RequiredLength = 6;
+    options.Password.RequireDigit = true;
+    options.Password.RequiredLength = 8;
     options.Password.RequireNonAlphanumeric = false;
-    options.Password.RequireUppercase = false;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireLowercase = true;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.AllowedForNewUsers = true;
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
@@ -43,7 +45,7 @@ builder.Services.AddIdentity<User, IdentityRole>(options =>
 //////////////////////////////////////////////////////////////
 
 var jwtKey = builder.Configuration["AppSettings:Token"]
-    ?? "E7gezhaa_Super_Secret_JWT_Key_2026_ForProduction!";
+    ?? "E7gezhaa_Super_Secret_JWT_Key_2026_!@#$%^&*()";
 
 var key = Encoding.UTF8.GetBytes(jwtKey);
 
@@ -66,6 +68,46 @@ builder.Services.AddAuthentication(options =>
 });
 
 //////////////////////////////////////////////////////////////
+// RATE LIMITING
+//////////////////////////////////////////////////////////////
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("GeneralPolicy", opt =>
+    {
+        opt.PermitLimit = 100;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 10;
+    });
+
+    options.AddFixedWindowLimiter("AuthPolicy", opt =>
+    {
+        opt.PermitLimit = 10;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 2;
+    });
+
+    options.AddFixedWindowLimiter("AiPolicy", opt =>
+    {
+        opt.PermitLimit = 20;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 5;
+    });
+
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = 429;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsync(
+            "{\"message\": \"لقد تجاوزت الحد المسموح به من الطلبات. يرجى الانتظار دقيقة والمحاولة مرة أخرى.\"}",
+            cancellationToken);
+    };
+});
+
+//////////////////////////////////////////////////////////////
 // SETTINGS
 //////////////////////////////////////////////////////////////
 
@@ -78,7 +120,7 @@ builder.Services.Configure<OpenAiSettings>(builder.Configuration.GetSection("Ope
 //////////////////////////////////////////////////////////////
 
 builder.Services.AddHttpClient<PaymobService>();
-builder.Services.AddScoped<IPaymentService, PaymentService>(); 
+builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddHttpClient();
 
 //////////////////////////////////////////////////////////////
@@ -108,7 +150,7 @@ builder.Services.AddControllers()
     });
 
 //////////////////////////////////////////////////////////////
-// OPENAPI + SCALAR (بديل Swagger - متوافق مع .NET 10)
+// OPENAPI + SCALAR
 //////////////////////////////////////////////////////////////
 
 builder.Services.AddOpenApi();
@@ -161,14 +203,18 @@ app.UseMiddleware<ExceptionMiddleware>();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapScalarApiReference(); // http://localhost:5000/scalar/v1
+    app.MapScalarApiReference();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+    app.UseHttpsRedirection();
+
 app.UseStaticFiles();
 app.UseCors("AllowFrontend");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapControllers();
+
+app.MapControllers().RequireRateLimiting("GeneralPolicy");
 
 app.Run();

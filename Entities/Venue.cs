@@ -10,9 +10,7 @@ namespace E7gezhaa.API.Entities
         [Key]
         public int Id { get; set; }
 
-        // تم التعديل ليكون اختياري في الـ Request لضمان مرور الـ Validation
         public string? VendorId { get; set; }
-
         [ForeignKey("VendorId")]
         public virtual Vendor? Vendor { get; set; }
 
@@ -22,7 +20,6 @@ namespace E7gezhaa.API.Entities
 
         [Required]
         public string Name { get; set; } = string.Empty;
-
         public int Capacity { get; set; }
         public string? Features { get; set; }
         public string? WebsiteUrl { get; set; }
@@ -47,6 +44,10 @@ namespace E7gezhaa.API.Entities
         public string Description { get; set; } = string.Empty;
         public string Location { get; set; } = string.Empty;
         public string Category { get; set; } = string.Empty;
+
+        // ✅ Soft Delete
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
 
         // العلاقات
         public virtual ICollection<VenueImage> Images { get; set; } = new List<VenueImage>();

@@ -1,11 +1,10 @@
-﻿using E7gezhaa.API.Entities;
+﻿using E7gezhaa.API.DTOs;
+using E7gezhaa.API.Entities;
 using E7gezhaa.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System;
 using System.Security.Claims;
-using System.Threading.Tasks;
 
 namespace E7gezhaa.API.Controllers
 {
@@ -23,34 +22,46 @@ namespace E7gezhaa.API.Controllers
             _bookingService = bookingService;
         }
 
-        // 1. الإضافة الجديدة: جلب حجوزات المستخدم للداشبورد
         [HttpGet("my-dashboard")]
-        public async Task<IActionResult> GetMyBookings()
+        public async Task<IActionResult> GetMyBookings([FromQuery] PaginationParams pagination)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (userId == null) return Unauthorized("يجب تسجيل الدخول");
+            if (userId == null) return Unauthorized();
 
-            // ننده على الميثود اللي أضفناها في الـ BookingService
             var bookings = await _bookingService.GetUserBookingsAsync(userId);
 
-            return Ok(bookings);
+            var totalCount = bookings.Count;
+            var paged = bookings
+                .Skip((pagination.PageNumber - 1) * pagination.PageSize)
+                .Take(pagination.PageSize)
+                .ToList();
+
+            return Ok(new PagedResult<BookingDashboardDto>
+            {
+                Data = paged,
+                TotalCount = totalCount,
+                PageNumber = pagination.PageNumber,
+                PageSize = pagination.PageSize
+            });
         }
 
-        // 2. الكود الأساسي بتاعك: ConfirmBooking (بدون أي تعديل)
         [HttpPost("confirm")]
         public async Task<IActionResult> ConfirmBooking([FromBody] BookingRequestDto request)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (userId == null) return Unauthorized("يجب تسجيل الدخول");
+            if (userId == null) return Unauthorized();
 
             var venue = await _context.Venues.FindAsync(request.VenueId);
             var slot = await _context.TimeSlots.FirstOrDefaultAsync(s => s.Id == request.SlotId && s.VenueId == request.VenueId);
 
             if (venue == null || slot == null || slot.IsBooked)
-                return BadRequest("الموعد غير متاح أو البيانات خاطئة");
+                return BadRequest(new { Message = "الموعد غير متاح أو البيانات خاطئة" });
 
             if (!_bookingService.IsValidBookingDate(slot.StartTime))
-                return BadRequest("لا يمكن الحجز في تاريخ قديم");
+                return BadRequest(new { Message = "لا يمكن الحجز في تاريخ قديم" });
 
             decimal totalPrice = _bookingService.CalculateTotalAmount(
                 venue.BasePrice, venue.PricePerHour, slot.StartTime, slot.EndTime, request.EventType, slot.PriceAdjustment);
@@ -78,7 +89,6 @@ namespace E7gezhaa.API.Controllers
 
                     _context.Bookings.Add(booking);
                     await _context.SaveChangesAsync();
-
                     await transaction.CommitAsync();
 
                     return Ok(new
@@ -92,21 +102,14 @@ namespace E7gezhaa.API.Controllers
                 catch (DbUpdateConcurrencyException)
                 {
                     await transaction.RollbackAsync();
-                    return Conflict("عذراً، هذا الموعد تم حجزه في اللحظة الحالية من قبل مستخدم آخر. يرجى اختيار موعد آخر.");
+                    return Conflict(new { Message = "عذراً، هذا الموعد تم حجزه للتو. يرجى اختيار موعد آخر." });
                 }
                 catch (Exception ex)
                 {
                     await transaction.RollbackAsync();
-                    return StatusCode(500, $"حدث خطأ أثناء معالجة الحجز: {ex.Message}");
+                    return StatusCode(500, new { Message = "حدث خطأ أثناء معالجة الحجز", Detail = ex.Message });
                 }
             });
         }
-    }
-
-    public class BookingRequestDto
-    {
-        public int VenueId { get; set; }
-        public int SlotId { get; set; }
-        public string EventType { get; set; } = "Wedding";
     }
 }

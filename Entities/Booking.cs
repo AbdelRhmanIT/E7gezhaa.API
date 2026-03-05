@@ -12,7 +12,6 @@ namespace E7gezhaa.API.Entities
 
         [Required]
         public string UserId { get; set; } = string.Empty;
-
         [ForeignKey("UserId")]
         public virtual User? User { get; set; }
 
@@ -35,7 +34,6 @@ namespace E7gezhaa.API.Entities
         [ForeignKey("BeautyPackageId")]
         public virtual BeautyPackage? BeautyPackage { get; set; }
 
-        // الوصلة الجديدة للدفع
         public virtual Payment? Payment { get; set; }
 
         [Required]
@@ -45,9 +43,12 @@ namespace E7gezhaa.API.Entities
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalPrice { get; set; }
 
-        public string Status { get; set; } = "Pending"; // Pending, Confirmed, Cancelled
+        public string Status { get; set; } = "Pending";
 
-        // علاقة بنود الحجز الإضافية
+        // ✅ Soft Delete
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
+
         public ICollection<BookingItem> BookingItems { get; set; } = new List<BookingItem>();
     }
 }

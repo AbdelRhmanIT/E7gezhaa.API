@@ -1,10 +1,9 @@
-﻿using E7gezhaa.API.Entities;
+﻿using E7gezhaa.API.DTOs;
+using E7gezhaa.API.Entities;
 using E7gezhaa.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System;
 using System.Security.Claims;
-using System.Threading.Tasks;
 
 namespace E7gezhaa.API.Controllers
 {
@@ -21,9 +20,22 @@ namespace E7gezhaa.API.Controllers
 
         [HttpPost("add-package")]
         [Authorize(Roles = "Vendor")]
-        public async Task<IActionResult> AddPackage([FromBody] BeautyPackage package)
+        public async Task<IActionResult> AddPackage([FromBody] BeautyPackageDto dto)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var vendorId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var package = new BeautyPackage
+            {
+                VendorId = vendorId!,
+                Name = dto.Name,
+                Description = dto.Description ?? "",
+                Price = dto.Price,
+                Available = true
+            };
+
             var result = await _beautyService.AddPackageAsync(package, vendorId!);
             return Ok(new { Message = "تمت إضافة الباقة", Data = result });
         }
@@ -32,18 +44,16 @@ namespace E7gezhaa.API.Controllers
         [Authorize]
         public async Task<IActionResult> Book([FromBody] BeautyBookingDto dto)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var booking = await _beautyService.BookBeautySessionAsync(dto.PackageId, dto.EventDate, userId!);
 
-            if (booking == null) return NotFound("الباقة غير موجودة");
+            if (booking == null)
+                return NotFound(new { Message = "الباقة غير موجودة" });
 
             return Ok(new { Message = "تم الحجز بنجاح", BookingId = booking.Id, Total = booking.TotalPrice });
         }
-    }
-
-    public class BeautyBookingDto
-    {
-        public int PackageId { get; set; }
-        public DateTime EventDate { get; set; }
     }
 }
