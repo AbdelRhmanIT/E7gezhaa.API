@@ -1,0 +1,34 @@
+﻿name: E7gezhaa API - CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    name: 🏗️ Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: 📦 Restore Dependencies
+        run: dotnet restore E7gezhaa.API/E7gezhaa.API.csproj
+
+      - name: 🏗️ Build
+        run: dotnet build E7gezhaa.API/E7gezhaa.API.csproj --no-restore --configuration Release
+
+      - name: 🧪 Run Tests
+        run: dotnet test E7gezhaa.Tests/E7gezhaa.Tests.csproj --no-restore --verbosity normal --configuration Release
+
+      - name: ✅ Test Results Summary
+        if: always()
+        run: echo "Tests completed!"
