@@ -15,15 +15,32 @@ using System.Threading.RateLimiting;
 var builder = WebApplication.CreateBuilder(args);
 
 //////////////////////////////////////////////////////////////
-// DATABASE
+// DATABASE (التعديل هنا فقط لمنع التضارب)
 //////////////////////////////////////////////////////////////
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
+// نتحقق أولاً إذا كانت الخدمة مسجلة بالفعل (عن طريق التستات) قبل تسجيل SQL Server
+var dbDescriptor = builder.Services.FirstOrDefault(d =>
+    d.ServiceType == typeof(DbContextOptions<AppDbContext>));
+
+if (dbDescriptor == null)
+{
+    var isTestEnvironment = builder.Environment.EnvironmentName == "Testing";
+
+    if (isTestEnvironment)
+    {
+        builder.Services.AddDbContext<AppDbContext>(options =>
+            options.UseInMemoryDatabase("TestDb_" + Guid.NewGuid()));
+    }
+    else
+    {
+        builder.Services.AddDbContext<AppDbContext>(options =>
+            options.UseSqlServer(
+                builder.Configuration.GetConnectionString("DefaultConnection")));
+    }
+}
 
 //////////////////////////////////////////////////////////////
-// IDENTITY
+// IDENTITY (كما هي تماماً)
 //////////////////////////////////////////////////////////////
 
 builder.Services.AddIdentity<User, IdentityRole>(options =>
@@ -41,7 +58,7 @@ builder.Services.AddIdentity<User, IdentityRole>(options =>
 .AddDefaultTokenProviders();
 
 //////////////////////////////////////////////////////////////
-// JWT
+// JWT (كما هي تماماً)
 //////////////////////////////////////////////////////////////
 
 var jwtKey = builder.Configuration["AppSettings:Token"]
@@ -68,7 +85,7 @@ builder.Services.AddAuthentication(options =>
 });
 
 //////////////////////////////////////////////////////////////
-// RATE LIMITING
+// RATE LIMITING (كما هي تماماً)
 //////////////////////////////////////////////////////////////
 
 builder.Services.AddRateLimiter(options =>
@@ -218,3 +235,5 @@ app.UseAuthorization();
 app.MapControllers().RequireRateLimiting("GeneralPolicy");
 
 app.Run();
+
+public partial class Program { }
